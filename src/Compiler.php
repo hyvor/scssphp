@@ -269,6 +269,11 @@ final class Compiler
     private $logger;
 
     /**
+     * Editrd by rasif
+     */
+    private array $files = [];
+
+    /**
      * Constructor
      *
      * @param array|null $cacheOptions
@@ -322,6 +327,16 @@ final class Compiler
     }
 
     /**
+     * Render scss files from the database.
+     * edited by rasif
+     * 
+     */
+    public function registerFiles(array $files): void
+    {
+        $this->files = $files;
+    }
+
+    /**
      * Compile scss
      *
      * @param string      $source
@@ -331,7 +346,7 @@ final class Compiler
      *
      * @throws SassException when the source fails to compile
      */
-    public function compileString(string $source, ?string $path = null): CompilationResult
+    public function compileFile(string $source, ?string $path = null): CompilationResult
     {
         if ($this->cache) {
             $cacheKey       = ($path ? $path : '(stdin)') . ':' . md5($source);
@@ -5251,6 +5266,11 @@ EOL;
     private function importFile(string $path, OutputBlock $out): void
     {
         $this->pushCallStack('import ' . $this->getPrettyPath($path));
+
+        $pathArray = explode('/', $path);
+        $fileName = end($pathArray);
+
+        // var_dump($path); die();
         // see if tree is cached
         $realPath = realpath($path);
 
@@ -5263,17 +5283,15 @@ EOL;
             throw $this->error('The Sass indented syntax is not implemented.');
         }
 
-        if (isset($this->importCache[$realPath])) {
-            $this->handleImportLoop($realPath);
-
-            $tree = $this->importCache[$realPath];
-        } else {
-            $code   = file_get_contents($path);
+        
+            // $code   = file_get_contents($path);
+            $code   = $this->files[$fileName];
+            // $code   = $this->registerFiles($fileName);
             $parser = $this->parserFactory($path);
             $tree   = $parser->parse($code);
 
             $this->importCache[$realPath] = $tree;
-        }
+        
 
         $currentDirectory = $this->currentDirectory;
         $this->currentDirectory = dirname($path);
@@ -5323,6 +5341,18 @@ EOL;
         if (self::isCssImport($url)) {
             return null;
         }
+
+        // To return the files without the .scss extention
+        if(array_key_exists($url, $this->files)){
+            return $url;
+        }
+
+        // To return the files with the .scss extention
+        if(!\is_null($this->files)){
+            return $url.'.scss';
+        }
+
+        // var_dump($url);
 
         if (!\is_null($currentDir)) {
             $relativePath = $this->resolveImportPath($url, $currentDir);
@@ -5410,13 +5440,15 @@ EOL;
     {
         $result = array_merge(
             $this->tryImportPath($path.'.sass'),
-            $this->tryImportPath($path.'.scss')
+            $this->tryImportPath($path.'.scss'),
+            // $this->tryImportPath($path. '.css')
         );
 
         if ($result) {
             return $result;
         }
 
+        // If you won't to mute .css file loading uncomment this line
         return $this->tryImportPath($path.'.css');
     }
 
@@ -5578,7 +5610,6 @@ EOL;
             if ($file === null) {
                 continue;
             }
-
             if (realpath($file) === $name) {
                 throw $this->error('An @import loop has been found: %s imports %s', $file, basename($file));
             }

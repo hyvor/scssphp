@@ -28,255 +28,297 @@ class ApiTest extends TestCase
     /**
      * @var Compiler
      */
-    private $scss;
+    
 
-    public function testUserFunction()
-    {
-        $this->scss = new Compiler();
+    public function testFile(){
 
-        $this->scss->registerFunction('add-two', function ($args) {
-            list($a, $b) = $args;
-            return new Number($a[1] + $b[1], '');
-        }, ['number1', 'number2']);
+        $bodyTwig = file_get_contents("tests/inputs/styles/body.scss");
+        $headerTwig = file_get_contents("tests/inputs/styles/header.scss");
+        $indexTwig = file_get_contents("tests/inputs/styles/index.scss");
 
-        $this->assertEquals(
-            'result: 30;',
-            $this->compile('result: add-two(10, 20);')
-        );
-    }
+        // Router Object
+        $file = new Compiler;
 
-    public function testUserFunctionNull()
-    {
-        $this->scss = new Compiler();
-
-        $this->scss->registerFunction('get-null', function ($args) {
-            return Compiler::$null;
-        }, []);
-
-        $this->assertEquals(
-            '',
-            $this->compile('result: get-null();')
-        );
-    }
-
-    public function testUserFunctionKwargs()
-    {
-        $this->scss = new Compiler();
-
-        $this->scss->registerFunction(
-            'divide',
-            function ($args, $kwargs) {
-                return new Number($kwargs['dividend'][1] / $kwargs['divisor'][1], '');
-            },
-            ['dividend', 'divisor']
+        $result = $file->registerFiles(
+            array(
+                'body.scss' => $bodyTwig , 
+                'header.scss' => $headerTwig, 
+                'index.scss' => $indexTwig
+            )
         );
 
-        $this->assertEquals(
-            'result: 15;',
-            $this->compile('result: divide($divisor: 2, $dividend: 30);')
-        );
+
+        echo $file->compileFile($indexTwig)->getCss();
+
+        // $this->assertIsArray($result);
+
+
+        // $expected = [
+        //     'get' =>[
+        //         'index.scss = $indexTwig',
+        //         'body.scss = $bodyTwig',
+        //         'header.scss = $headerTwig',
+        //     ],
+        // ];
+
+        // // Assert the file
+        // $this->assertEquals($result->importFile());
+
     }
 
-    public function testWrongCaseInFunctionName()
-    {
-        $this->scss = new Compiler();
 
-        $logStream = fopen("php://memory", 'r+');
-        assert($logStream !== false);
-        $this->scss->setLogger(new StreamLogger($logStream));
 
-        $result = $this->compile('a { b: faDe-out(#e7e8ea, 0.75) }');
 
-        rewind($logStream);
-        $output = stream_get_contents($logStream);
-        fclose($logStream);
 
-        $this->assertEquals("a {\n  b: faDe-out(#e7e8ea, 0.75);\n}", $result);
-        $this->assertEquals('', trim($output));
-    }
+    // private $scss;
 
-    public function testWrongCaseAtBeginningOfFunctionName()
-    {
-        $this->scss = new Compiler();
+    // public function testUserFunction()
+    // {
+    //     $this->scss = new Compiler();
 
-        $logStream = fopen("php://memory", 'r+');
-        assert($logStream !== false);
-        $this->scss->setLogger(new StreamLogger($logStream));
+    //     $this->scss->registerFunction('add-two', function ($args) {
+    //         list($a, $b) = $args;
+    //         return new Number($a[1] + $b[1], '');
+    //     }, ['number1', 'number2']);
 
-        $result = $this->compile('a { b: Fade-out(#e7e8ea, 0.75) }');
+    //     $this->assertEquals(
+    //         'result: 30;',
+    //         $this->compile('result: add-two(10, 20);')
+    //     );
+    // }
 
-        rewind($logStream);
-        $output = stream_get_contents($logStream);
-        fclose($logStream);
+    // public function testUserFunctionNull()
+    // {
+    //     $this->scss = new Compiler();
 
-        $this->assertEquals("a {\n  b: Fade-out(#e7e8ea, 0.75);\n}", $result);
-        $this->assertEquals('', trim($output));
-    }
+    //     $this->scss->registerFunction('get-null', function ($args) {
+    //         return Compiler::$null;
+    //     }, []);
 
-    public function testOmittedDashInFunctionName()
-    {
-        $this->scss = new Compiler();
+    //     $this->assertEquals(
+    //         '',
+    //         $this->compile('result: get-null();')
+    //     );
+    // }
 
-        $logStream = fopen("php://memory", 'r+');
-        assert($logStream !== false);
-        $this->scss->setLogger(new StreamLogger($logStream));
+    // public function testUserFunctionKwargs()
+    // {
+    //     $this->scss = new Compiler();
 
-        $result = $this->compile('a { b: fadeout(#e7e8ea, 0.75) }');
+    //     $this->scss->registerFunction(
+    //         'divide',
+    //         function ($args, $kwargs) {
+    //             return new Number($kwargs['dividend'][1] / $kwargs['divisor'][1], '');
+    //         },
+    //         ['dividend', 'divisor']
+    //     );
 
-        rewind($logStream);
-        $output = stream_get_contents($logStream);
-        fclose($logStream);
+    //     $this->assertEquals(
+    //         'result: 15;',
+    //         $this->compile('result: divide($divisor: 2, $dividend: 30);')
+    //     );
+    // }
 
-        $this->assertEquals("a {\n  b: fadeout(#e7e8ea, 0.75);\n}", $result);
-        $this->assertEquals('', trim($output));
-    }
+    // public function testWrongCaseInFunctionName()
+    // {
+    //     $this->scss = new Compiler();
 
-    public function testAdditionalDashInFunctionName()
-    {
-        $this->scss = new Compiler();
+    //     $logStream = fopen("php://memory", 'r+');
+    //     assert($logStream !== false);
+    //     $this->scss->setLogger(new StreamLogger($logStream));
 
-        $logStream = fopen("php://memory", 'r+');
-        assert($logStream !== false);
-        $this->scss->setLogger(new StreamLogger($logStream));
+    //     $result = $this->compile('a { b: faDe-out(#e7e8ea, 0.75) }');
 
-        $result = $this->compile('a { b: trans-parentize(#e7e8ea, 0.75) }');
+    //     rewind($logStream);
+    //     $output = stream_get_contents($logStream);
+    //     fclose($logStream);
 
-        rewind($logStream);
-        $output = stream_get_contents($logStream);
-        fclose($logStream);
+    //     $this->assertEquals("a {\n  b: faDe-out(#e7e8ea, 0.75);\n}", $result);
+    //     $this->assertEquals('', trim($output));
+    // }
 
-        $this->assertEquals("a {\n  b: trans-parentize(#e7e8ea, 0.75);\n}", $result);
-        $this->assertEquals('', trim($output));
-    }
+    // public function testWrongCaseAtBeginningOfFunctionName()
+    // {
+    //     $this->scss = new Compiler();
 
-    public function testImportCustomCallback()
-    {
-        $this->scss = new Compiler();
+    //     $logStream = fopen("php://memory", 'r+');
+    //     assert($logStream !== false);
+    //     $this->scss->setLogger(new StreamLogger($logStream));
 
-        $this->scss->addImportPath(function ($path) {
-            return __DIR__ . '/inputs/' . str_replace('.foo', '.scss', $path);
-        });
+    //     $result = $this->compile('a { b: Fade-out(#e7e8ea, 0.75) }');
 
-        $this->assertEquals(
-            trim(file_get_contents(__DIR__ . '/outputs/variables.css')),
-            $this->compile('@import "variables.foo";')
-        );
-    }
+    //     rewind($logStream);
+    //     $output = stream_get_contents($logStream);
+    //     fclose($logStream);
 
-    public function testImportAbsolutePath()
-    {
-        $this->scss = new Compiler();
+    //     $this->assertEquals("a {\n  b: Fade-out(#e7e8ea, 0.75);\n}", $result);
+    //     $this->assertEquals('', trim($output));
+    // }
 
-        $basePath = __DIR__ . \DIRECTORY_SEPARATOR . 'inputs';
+    // public function testOmittedDashInFunctionName()
+    // {
+    //     $this->scss = new Compiler();
 
-        $this->scss->addVariables(['base-path' => ValueConverter::fromPhp($basePath)]);
-        $this->scss->addImportPath(__DIR__ . \DIRECTORY_SEPARATOR . 'inputs');
+    //     $logStream = fopen("php://memory", 'r+');
+    //     assert($logStream !== false);
+    //     $this->scss->setLogger(new StreamLogger($logStream));
 
-        $this->assertEquals(
-            trim(file_get_contents(__DIR__ . '/outputs/variables.css')),
-            $this->compile('@import $base-path + "/variables.scss";')
-        );
-    }
+    //     $result = $this->compile('a { b: fadeout(#e7e8ea, 0.75) }');
 
-    /**
-     * @dataProvider provideSetVariables
-     */
-    public function testSetVariables($expected, $scss, $variables)
-    {
-        $this->scss = new Compiler();
+    //     rewind($logStream);
+    //     $output = stream_get_contents($logStream);
+    //     fclose($logStream);
 
-        $this->scss->replaceVariables(array_map('ScssPhp\ScssPhp\ValueConverter::parseValue', $variables));
+    //     $this->assertEquals("a {\n  b: fadeout(#e7e8ea, 0.75);\n}", $result);
+    //     $this->assertEquals('', trim($output));
+    // }
 
-        $this->assertEquals($expected, $this->compile($scss));
-    }
+    // public function testAdditionalDashInFunctionName()
+    // {
+    //     $this->scss = new Compiler();
 
-    public function provideSetVariables()
-    {
-        return [
-            [
-                ".magic {\n  color: red;\n  width: 760px;\n}",
-                '.magic { color: $color; width: $base - 200; }',
-                [
-                    'color' => 'red',
-                    'base'  => '960px',
-                ],
-            ],
-            [
-                ".logo {\n  color: gray;\n}",
-                '.logo { color: desaturate($primary, 100%); }',
-                [
-                    'primary' => '#ff0000',
-                ],
-            ],
-            // !default
-            [
-                ".default {\n  color: red;\n}",
-                '$color: red !default;' . "\n" . '.default { color: $color; }',
-                [
-                ],
-            ],
-            // no !default
-            [
-                ".default {\n  color: red;\n}",
-                '$color: red;' . "\n" . '.default { color: $color; }',
-                [
-                    'color' => 'blue',
-                ],
-            ],
-            // override !default
-            [
-                ".default {\n  color: blue;\n}",
-                '$color: red !default;' . "\n" . '.default { color: $color; }',
-                [
-                    'color' => 'blue',
-                ],
-            ],
-        ];
-    }
+    //     $logStream = fopen("php://memory", 'r+');
+    //     assert($logStream !== false);
+    //     $this->scss->setLogger(new StreamLogger($logStream));
 
-    public function testCompileWithoutCharset()
-    {
-        $this->scss = new Compiler();
-        $this->scss->setCharset(false);
+    //     $result = $this->compile('a { b: trans-parentize(#e7e8ea, 0.75) }');
 
-        self::assertEquals(
-            "a {\n  b: \"à\";\n}",
-            $this->compile('a { b: "à" }')
-        );
-    }
+    //     rewind($logStream);
+    //     $output = stream_get_contents($logStream);
+    //     fclose($logStream);
 
-    public function testCompileWithCharset()
-    {
-        $this->scss = new Compiler();
-        $this->scss->setCharset(true);
+    //     $this->assertEquals("a {\n  b: trans-parentize(#e7e8ea, 0.75);\n}", $result);
+    //     $this->assertEquals('', trim($output));
+    // }
 
-        self::assertEquals(
-            "@charset \"UTF-8\";\na {\n  b: \"à\";\n}",
-            $this->compile('a { b: "à" }')
-        );
-    }
+    // public function testImportCustomCallback()
+    // {
+    //     $this->scss = new Compiler();
 
-    public function testCompileByteOrderMarker()
-    {
-        $this->scss = new Compiler();
+    //     $this->scss->addImportPath(function ($path) {
+    //         return __DIR__ . '/tests/inputs/' . str_replace('.foo', '.scss', $path);
+    //     });
 
-        // test that BOM is stripped/ignored
-        $this->assertEquals(
-            '@import "main.css";',
-            $this->compile("\xEF\xBB\xBF@import \"main.css\";")
-        );
-    }
+    //     $this->assertEquals(
+    //         trim(file_get_contents(__DIR__ . '/outputs/variables.css')),
+    //         $this->compile('@import "variables.foo";')
+    //     );
+    // }
 
-    public function testGetStringText()
-    {
-        $compiler = new Compiler();
-        $string = ValueConverter::parseValue('"foobar"');
+    // public function testImportAbsolutePath()
+    // {
+    //     $this->scss = new Compiler();
 
-        $this->assertEquals('foobar', $compiler->getStringText($compiler->assertString($string)));
-    }
+    //     $basePath = __DIR__ . \DIRECTORY_SEPARATOR . 'tests/inputs';
 
-    public function compile($str)
-    {
-        return trim($this->scss->compileString($str)->getCss());
-    }
+    //     $this->scss->addVariables(['base-path' => ValueConverter::fromPhp($basePath)]);
+    //     $this->scss->addImportPath(__DIR__ . \DIRECTORY_SEPARATOR . 'tests/inputs');
+
+    //     $this->assertEquals(
+    //         trim(file_get_contents(__DIR__ . '/outputs/variables.css')),
+    //         $this->compile('@import $base-path + "/variables.scss";')
+    //     );
+    // }
+
+    // /**
+    //  * @dataProvider provideSetVariables
+    //  */
+    // public function testSetVariables($expected, $scss, $variables)
+    // {
+    //     $this->scss = new Compiler();
+
+    //     $this->scss->replaceVariables(array_map('ScssPhp\ScssPhp\ValueConverter::parseValue', $variables));
+
+    //     $this->assertEquals($expected, $this->compile($scss));
+    // }
+
+    // public function provideSetVariables()
+    // {
+    //     return [
+    //         [
+    //             ".magic {\n  color: red;\n  width: 760px;\n}",
+    //             '.magic { color: $color; width: $base - 200; }',
+    //             [
+    //                 'color' => 'red',
+    //                 'base'  => '960px',
+    //             ],
+    //         ],
+    //         [
+    //             ".logo {\n  color: gray;\n}",
+    //             '.logo { color: desaturate($primary, 100%); }',
+    //             [
+    //                 'primary' => '#ff0000',
+    //             ],
+    //         ],
+    //         // !default
+    //         [
+    //             ".default {\n  color: red;\n}",
+    //             '$color: red !default;' . "\n" . '.default { color: $color; }',
+    //             [
+    //             ],
+    //         ],
+    //         // no !default
+    //         [
+    //             ".default {\n  color: red;\n}",
+    //             '$color: red;' . "\n" . '.default { color: $color; }',
+    //             [
+    //                 'color' => 'blue',
+    //             ],
+    //         ],
+    //         // override !default
+    //         [
+    //             ".default {\n  color: blue;\n}",
+    //             '$color: red !default;' . "\n" . '.default { color: $color; }',
+    //             [
+    //                 'color' => 'blue',
+    //             ],
+    //         ],
+    //     ];
+    // }
+
+    // public function testCompileWithoutCharset()
+    // {
+    //     $this->scss = new Compiler();
+    //     $this->scss->setCharset(false);
+
+    //     self::assertEquals(
+    //         "a {\n  b: \"à\";\n}",
+    //         $this->compile('a { b: "à" }')
+    //     );
+    // }
+
+    // public function testCompileWithCharset()
+    // {
+    //     $this->scss = new Compiler();
+    //     $this->scss->setCharset(true);
+
+    //     self::assertEquals(
+    //         "@charset \"UTF-8\";\na {\n  b: \"à\";\n}",
+    //         $this->compile('a { b: "à" }')
+    //     );
+    // }
+
+    // public function testCompileByteOrderMarker()
+    // {
+    //     $this->scss = new Compiler();
+
+    //     // test that BOM is stripped/ignored
+    //     $this->assertEquals(
+    //         '@import "main.css";',
+    //         $this->compile("\xEF\xBB\xBF@import \"main.css\";")
+    //     );
+    // }
+
+    // public function testGetStringText()
+    // {
+    //     $compiler = new Compiler();
+    //     $string = ValueConverter::parseValue('"foobar"');
+
+    //     $this->assertEquals('foobar', $compiler->getStringText($compiler->assertString($string)));
+    // }
+
+    // public function compile($str)
+    // {
+    //     return trim($this->scss->compileString($str)->getCss());
+    // }
 }

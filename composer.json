@@ -1,5 +1,5 @@
 {
-    "name": "scssphp/scssphp",
+    "name": "hyvor/scssphp",
     "type": "library",
     "description": "scssphp is a compiler for SCSS written in PHP.",
     "keywords": ["css", "stylesheet", "scss", "sass", "less"],
@@ -36,7 +36,7 @@
     },
     "require-dev": {
         "bamarni/composer-bin-plugin": "^1.4",
-        "phpunit/phpunit": "^8.5 || ^9.5",
+        "phpunit/phpunit": "^9.5",
         "sass/sass-spec": "*",
         "squizlabs/php_codesniffer": "~3.5",
         "symfony/phpunit-bridge": "^5.1",
