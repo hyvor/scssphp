@@ -28,7 +28,7 @@ class ApiTest extends TestCase
     /**
      * @var Compiler
      */
-    
+
 
     public function testFile(){
 
@@ -41,8 +41,8 @@ class ApiTest extends TestCase
 
         $result = $file->registerFiles(
             array(
-                'body.scss' => $bodyTwig , 
-                'header.scss' => $headerTwig, 
+                'body.scss' => $bodyTwig ,
+                'header.scss' => $headerTwig,
                 'index.scss' => $indexTwig
             )
         );
@@ -205,9 +205,35 @@ class ApiTest extends TestCase
     //     );
     // }
 
-    // public function testImportAbsolutePath()
-    // {
-    //     $this->scss = new Compiler();
+    public function testSourceMapWithoutSourcePath()
+    {
+        $source = <<<'SCSS'
+@import "test.css";
+
+body {
+  background-color: orange;
+
+  h1 {
+    border: 2rem dashed black;
+  }
+}
+
+SCSS;
+
+        $compiler = new Compiler();
+        $compiler->setSourceMap(Compiler::SOURCE_MAP_FILE);
+        $compiler->setSourceMapOptions(['sourceMapURL' => 'test.css.map']);
+
+        $result = $compiler->compileString($source);
+
+        $this->assertStringEndsWith('/*# sourceMappingURL=test.css.map */', $result->getCss());
+        $this->assertNotEmpty($result->getSourceMap());
+    }
+
+    public function testGetStringText()
+    {
+        $compiler = new Compiler();
+        $string = ValueConverter::parseValue('"foobar"');
 
     //     $basePath = __DIR__ . \DIRECTORY_SEPARATOR . 'tests/inputs';
 
