@@ -14,33 +14,35 @@ namespace ScssPhp\ScssPhp\Tests;
 
 use PHPUnit\Framework\TestCase;
 use ScssPhp\ScssPhp\Compiler;
-use ScssPhp\ScssPhp\Logger\QuietLogger;
 
-/**
- * Exception test
- *
- * @author Leaf Corcoran <leafot@gmail.com>
- */
 class FileTest extends TestCase
 {
-    public static function fileTest(){
 
-        $bodyTwig = file_get_contents("Input/styles/body.scss");
-        $headerTwig = file_get_contents("Input/styles/header.scss");
-        $indexTwig = file_get_contents("Input/styles/index.scss");
+    /**
+     * @test
+     */
+    public function fileTest()
+    {
+
+        $body = file_get_contents(__DIR__ . "/inputs/styles/body.scss");
+        $header = file_get_contents(__DIR__ . "/inputs/styles/header.scss");
+        $index = file_get_contents(__DIR__ . "/inputs/styles/index.scss");
 
         // Router Object
-        $file = new src\Compiler;
+        $file = new Compiler();
 
-        $result = $file->registerFiles(
+        $file->registerFiles(
             array(
-                'body.scss' => $bodyTwig , 
-                'header.scss' => $headerTwig, 
-                'index.scss' => $indexTwig
+                'body.scss' => $body ,
+                'header.scss' => $header,
+                'index.scss' => $index
             )
         );
 
-        $this->assertIsArray($result);
+        $css = $file->compileFile('index.scss')->getCss();
+
+        $this->assertNotEmpty($css);
+
 
         // $expected = [
         //     'get' =>[

@@ -352,11 +352,12 @@ final class Compiler
      * Compiles a file
      * registerFiles must be called before calling this
      */
-    public function compileFile(string $fileName) : void
+    public function compileFile(string $fileName) : null|CompilationResult
     {
         if (isset($this->files[$fileName])) {
             return $this->compileString($this->files[$fileName]);
         }
+        return null;
     }
 
     /**
