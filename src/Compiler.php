@@ -269,7 +269,7 @@ final class Compiler
     private $logger;
 
     /**
-     * Editrd by rasif
+     * For saving the files for importing (array loading)
      */
     private array $files = [];
 
@@ -327,13 +327,25 @@ final class Compiler
     }
 
     /**
-     * Render scss files from the database.
-     * edited by rasif
-     * 
+     *
+     * Register files for importing
+     *
      */
     public function registerFiles(array $files): void
     {
         $this->files = $files;
+    }
+
+
+    /**
+     * Compiles a file
+     * registerFiles must be called before calling this
+     */
+    public function compileFile(string $fileName) : void
+    {
+        if (isset($this->files[$fileName])) {
+            return $this->compileString($this->files[$fileName]);
+        }
     }
 
     /**
@@ -346,7 +358,7 @@ final class Compiler
      *
      * @throws SassException when the source fails to compile
      */
-    public function compileFile(string $source, ?string $path = null): CompilationResult
+    public function compileString(string $source, ?string $path = null): CompilationResult
     {
         if ($this->cache) {
             $cacheKey       = ($path ? $path : '(stdin)') . ':' . md5($source);
@@ -5283,7 +5295,7 @@ EOL;
             throw $this->error('The Sass indented syntax is not implemented.');
         }
 
-        
+
             // $code   = file_get_contents($path);
             $code   = $this->files[$fileName];
             // $code   = $this->registerFiles($fileName);
@@ -5291,7 +5303,7 @@ EOL;
             $tree   = $parser->parse($code);
 
             $this->importCache[$realPath] = $tree;
-        
+
 
         $currentDirectory = $this->currentDirectory;
         $this->currentDirectory = dirname($path);
