@@ -4,8 +4,6 @@ parameters:
     treatPhpDocTypesAsCertain: false
     paths:
         - ./src/
-    scanDirectories:
-        - vendor-bin/phpstan/vendor/symfony/
     ignoreErrors:
         # We want to document the enum as return type, without caring about the exact values.
         -
@@ -23,11 +21,23 @@ parameters:
             path: src/Compiler.php
 
         -
+            message: "#^Method ScssPhp\\\\ScssPhp\\\\Compiler\\:\\:lib[^(]+\\(\\) return type has no value type specified in iterable type array\\.$#"
+            path: src/Compiler.php
+
+        -
             message: "#^Method ScssPhp\\\\ScssPhp\\\\Compiler\\:\\:lib[^(]+\\(\\) has parameter \\$args with no type specified\\.$#"
             path: src/Compiler.php
 
         -
+            message: "#^Method ScssPhp\\\\ScssPhp\\\\Compiler\\:\\:lib[^(]+\\(\\) has parameter \\$args with no value type specified in iterable type array\\.$#"
+            path: src/Compiler.php
+
+        -
             message: "#^Method ScssPhp\\\\ScssPhp\\\\Compiler\\:\\:lib[^(]+\\(\\) has parameter \\$kwargs with no type specified\\.$#"
+            path: src/Compiler.php
+
+        -
+            message: "#^Method ScssPhp\\\\ScssPhp\\\\Compiler\\:\\:lib[^(]+\\(\\) has parameter \\$kwargs with no value type specified in iterable type array\\.$#"
             path: src/Compiler.php
 
         -

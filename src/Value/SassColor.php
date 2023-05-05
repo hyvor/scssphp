@@ -17,6 +17,9 @@ use ScssPhp\ScssPhp\Util\ErrorUtil;
 use ScssPhp\ScssPhp\Util\NumberUtil;
 use ScssPhp\ScssPhp\Visitor\ValueVisitor;
 
+/**
+ * A SassScript color.
+ */
 final class SassColor extends Value
 {
     /**
@@ -43,30 +46,38 @@ final class SassColor extends Value
     /**
      * This color's hue, between `0` and `360`.
      *
-     * @var int|float|null
+     * @var float|null
      */
     private $hue;
 
     /**
      * This color's saturation, a percentage between `0` and `100`.
      *
-     * @var int|float|null
+     * @var float|null
      */
     private $saturation;
 
     /**
      * This color's lightness, a percentage between `0` and `100`.
      *
-     * @var int|float|null
+     * @var float|null
      */
     private $lightness;
 
     /**
-     * TThis color's alpha channel, between `0` and `1`.
+     * This color's alpha channel, between `0` and `1`.
      *
-     * @var int|float
+     * @var float
+     * @readonly
      */
     private $alpha;
+
+    /**
+     * @var SpanColorFormat|string|null
+     * @phpstan-var SpanColorFormat|ColorFormat::*|null
+     * @readonly
+     */
+    private $format;
 
     /**
      * Creates a RGB color
@@ -74,16 +85,38 @@ final class SassColor extends Value
      * @param int $red
      * @param int $blue
      * @param int $green
-     * @param int|float|null $alpha
+     * @param float|null $alpha
      *
      * @return SassColor
      *
      * @throws \OutOfRangeException if values are outside the expected range.
      */
-    public static function rgb(int $red, int $green, int $blue, $alpha = null): SassColor
+    public static function rgb(int $red, int $green, int $blue, ?float $alpha = null): SassColor
+    {
+        return self::rgbInternal($red, $green, $blue, $alpha);
+    }
+
+    /**
+     * Like {@see rgb} but also takes a color format.
+     *
+     * @internal
+     *
+     * @param int $red
+     * @param int $blue
+     * @param int $green
+     * @param float|null $alpha
+     * @param SpanColorFormat|string|null $format
+     *
+     * @return SassColor
+     *
+     * @phpstan-param SpanColorFormat|ColorFormat::*|null $format
+     *
+     * @throws \OutOfRangeException if values are outside the expected range.
+     */
+    public static function rgbInternal(int $red, int $green, int $blue, ?float $alpha = null, $format = null): SassColor
     {
         if ($alpha === null) {
-            $alpha = 1;
+            $alpha = 1.0;
         } else {
             $alpha = NumberUtil::fuzzyAssertRange($alpha, 0, 1, 'alpha');
         }
@@ -92,21 +125,45 @@ final class SassColor extends Value
         ErrorUtil::checkIntInInterval($green, 0, 255, 'green');
         ErrorUtil::checkIntInInterval($blue, 0, 255, 'blue');
 
-        return new self($red, $green, $blue, null, null, null, $alpha);
+        return new self($red, $green, $blue, null, null, null, $alpha, $format);
     }
 
     /**
-     * @param int|float $hue
-     * @param int|float $saturation
-     * @param int|float $lightness
-     * @param int|float|null $alpha
+     * @param float $hue
+     * @param float $saturation
+     * @param float $lightness
+     * @param float|null $alpha
      *
      * @return SassColor
+     *
+     * @throws \OutOfRangeException if values are outside the expected range.
      */
-    public static function hsl($hue, $saturation, $lightness, $alpha = null): SassColor
+    public static function hsl(float $hue, float $saturation, float $lightness, ?float $alpha = null): SassColor
+    {
+        return self::hslInternal($hue, $saturation, $lightness, $alpha);
+    }
+
+    /**
+     * Like {@see hsl} but also takes a color format.
+     *
+     * @internal
+     *
+     * @param float $hue
+     * @param float $saturation
+     * @param float $lightness
+     * @param float|null $alpha
+     * @param SpanColorFormat|string|null $format
+     *
+     * @return SassColor
+     *
+     * @throws \OutOfRangeException if values are outside the expected range.
+     *
+     * @phpstan-param SpanColorFormat|ColorFormat::*|null $format
+     */
+    public static function hslInternal(float $hue, float $saturation, float $lightness, ?float $alpha = null, $format = null): SassColor
     {
         if ($alpha === null) {
-            $alpha = 1;
+            $alpha = 1.0;
         } else {
             $alpha = NumberUtil::fuzzyAssertRange($alpha, 0, 1, 'alpha');
         }
@@ -115,18 +172,18 @@ final class SassColor extends Value
         $saturation = NumberUtil::fuzzyAssertRange($saturation, 0, 100, 'saturation');
         $lightness = NumberUtil::fuzzyAssertRange($lightness, 0, 100, 'lightness');
 
-        return new self(null, null, null, $hue, $saturation, $lightness, $alpha);
+        return new self(null, null, null, $hue, $saturation, $lightness, $alpha, $format);
     }
 
     /**
-     * @param int|float      $hue
-     * @param int|float      $whiteness
-     * @param int|float      $blackness
-     * @param int|float|null $alpha
+     * @param float      $hue
+     * @param float      $whiteness
+     * @param float      $blackness
+     * @param float|null $alpha
      *
      * @return SassColor
      */
-    public static function hwb($hue, $whiteness, $blackness, $alpha = null): SassColor
+    public static function hwb(float $hue, float $whiteness, float $blackness, ?float $alpha = null): SassColor
     {
         $scaledHue = fmod($hue , 360) / 360;
         $scaledWhiteness = NumberUtil::fuzzyAssertRange($whiteness, 0, 100, 'whiteness') / 100;
@@ -159,12 +216,15 @@ final class SassColor extends Value
      * @param int|null       $red
      * @param int|null       $green
      * @param int|null       $blue
-     * @param int|float|null $hue
-     * @param int|float|null $saturation
-     * @param int|float|null $lightness
-     * @param int|float      $alpha
+     * @param float|null     $hue
+     * @param float|null     $saturation
+     * @param float|null     $lightness
+     * @param float          $alpha
+     * @param SpanColorFormat|string|null $format
+     *
+     * @phpstan-param SpanColorFormat|ColorFormat::*|null $format
      */
-    private function __construct(?int $red, ?int $green, ?int $blue, $hue, $saturation, $lightness, $alpha)
+    private function __construct(?int $red, ?int $green, ?int $blue, ?float $hue, ?float $saturation, ?float $lightness, float $alpha, $format = null)
     {
         $this->red = $red;
         $this->green = $green;
@@ -173,6 +233,7 @@ final class SassColor extends Value
         $this->saturation = $saturation;
         $this->lightness = $lightness;
         $this->alpha = $alpha;
+        $this->format = $format;
     }
 
     public function getRed(): int
@@ -205,10 +266,7 @@ final class SassColor extends Value
         return $this->blue;
     }
 
-    /**
-     * @return int|float
-     */
-    public function getHue()
+    public function getHue(): float
     {
         if (\is_null($this->hue)) {
             $this->rgbToHsl();
@@ -218,10 +276,7 @@ final class SassColor extends Value
         return $this->hue;
     }
 
-    /**
-     * @return int|float
-     */
-    public function getSaturation()
+    public function getSaturation(): float
     {
         if (\is_null($this->saturation)) {
             $this->rgbToHsl();
@@ -231,10 +286,7 @@ final class SassColor extends Value
         return $this->saturation;
     }
 
-    /**
-     * @return int|float
-     */
-    public function getLightness()
+    public function getLightness(): float
     {
         if (\is_null($this->lightness)) {
             $this->rgbToHsl();
@@ -244,28 +296,34 @@ final class SassColor extends Value
         return $this->lightness;
     }
 
-    /**
-     * @return float|int
-     */
-    public function getWhiteness()
+    public function getWhiteness(): float
     {
         return min($this->getRed(), $this->getGreen(), $this->getBlue()) / 255 * 100;
     }
 
-    /**
-     * @return float|int
-     */
-    public function getBlackness()
+    public function getBlackness(): float
     {
         return 100 - max($this->getRed(), $this->getGreen(), $this->getBlue()) / 255 * 100;
     }
 
-    /**
-     * @return int|float
-     */
-    public function getAlpha()
+    public function getAlpha(): float
     {
         return $this->alpha;
+    }
+
+    /**
+     * The format in which this color was originally written and should be
+     * serialized in expanded mode, or `null` if the color wasn't written in a
+     * supported format.
+     *
+     * @internal
+     *
+     * @return SpanColorFormat|string|null
+     * @phpstan-return SpanColorFormat|ColorFormat::*|null
+     */
+    public function getFormat()
+    {
+        return $this->format;
     }
 
     public function accept(ValueVisitor $visitor)
@@ -282,47 +340,47 @@ final class SassColor extends Value
      * @param int|null $red
      * @param int|null $green
      * @param int|null $blue
-     * @param int|float|null $alpha
+     * @param float|null $alpha
      *
      * @return SassColor
      */
-    public function changeRgb(?int $red = null, ?int $green = null, ?int $blue = null, $alpha = null): SassColor
+    public function changeRgb(?int $red = null, ?int $green = null, ?int $blue = null, ?float $alpha = null): SassColor
     {
         return self::rgb($red ?? $this->getRed(), $green ?? $this->getGreen(), $blue ?? $this->getBlue(), $alpha ?? $this->alpha);
     }
 
     /**
-     * @param int|float|null $hue
-     * @param int|float|null $saturation
-     * @param int|float|null $lightness
-     * @param int|float|null $alpha
+     * @param float|null $hue
+     * @param float|null $saturation
+     * @param float|null $lightness
+     * @param float|null $alpha
      *
      * @return SassColor
      */
-    public function changeHsl($hue = null, $saturation = null, $lightness = null, $alpha = null): SassColor
+    public function changeHsl(?float $hue = null, ?float $saturation = null, ?float $lightness = null, ?float $alpha = null): SassColor
     {
         return self::hsl($hue ?? $this->getHue(), $saturation ?? $this->getSaturation(), $lightness ?? $this->getLightness(), $alpha ?? $this->alpha);
     }
 
     /**
-     * @param int|float|null $hue
-     * @param int|float|null $whiteness
-     * @param int|float|null $blackness
-     * @param int|float|null $alpha
+     * @param float|null $hue
+     * @param float|null $whiteness
+     * @param float|null $blackness
+     * @param float|null $alpha
      *
      * @return SassColor
      */
-    public function changeHwb($hue = null, $whiteness = null, $blackness = null, $alpha = null): SassColor
+    public function changeHwb(?float $hue = null, ?float $whiteness = null, ?float $blackness = null, ?float $alpha = null): SassColor
     {
         return self::hwb($hue ?? $this->getHue(), $whiteness ?? $this->getWhiteness(), $blackness ?? $this->getBlackness(), $alpha ?? $this->alpha);
     }
 
     /**
-     * @param int|float $alpha
+     * @param float $alpha
      *
      * @return SassColor
      */
-    public function changeAlpha($alpha): SassColor
+    public function changeAlpha(float $alpha): SassColor
     {
         return new self(
             $this->red,
@@ -432,14 +490,7 @@ final class SassColor extends Value
         $this->blue = NumberUtil::fuzzyRound(self::hueToRgb($m1, $m2, $scaledHue - 1 / 3) * 255);
     }
 
-    /**
-     * @param int|float $m1
-     * @param int|float $m2
-     * @param int|float $hue
-     *
-     * @return int|float
-     */
-    private static function hueToRgb($m1, $m2, $hue)
+    private static function hueToRgb(float $m1, float $m2, float $hue): float
     {
         if ($hue < 0) {
             $hue += 1;

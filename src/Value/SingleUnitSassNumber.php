@@ -57,15 +57,16 @@ final class SingleUnitSassNumber extends SassNumber
 
     /**
      * @var string
+     * @readonly
      */
     private $unit;
 
     /**
-     * @param int|float                          $value
+     * @param float                              $value
      * @param string                             $unit
      * @param array{SassNumber, SassNumber}|null $asSlash
      */
-    public function __construct($value, string $unit, array $asSlash = null)
+    public function __construct(float $value, string $unit, array $asSlash = null)
     {
         parent::__construct($value, $asSlash);
         $this->unit = $unit;
@@ -86,7 +87,7 @@ final class SingleUnitSassNumber extends SassNumber
         return true;
     }
 
-    protected function withValue($value): SassNumber
+    protected function withValue(float $value): SassNumber
     {
         return new self($value, $this->unit);
     }
@@ -130,12 +131,30 @@ final class SingleUnitSassNumber extends SassNumber
 
     public function coerceToMatch(SassNumber $other, ?string $name = null, ?string $otherName = null): SassNumber
     {
-        return $this->convertToMatch($other, $name, $otherName);
+        if ($other instanceof SingleUnitSassNumber) {
+            $coerced = $this->tryCoerceToUnit($other->unit);
+
+            if ($coerced !== null) {
+                return $coerced;
+            }
+        }
+
+        // Call the parent to generate a consistent error message.
+        return parent::coerceToMatch($other, $name, $otherName);
     }
 
-    public function coerceValueToMatch(SassNumber $other, ?string $name = null, ?string $otherName = null)
+    public function coerceValueToMatch(SassNumber $other, ?string $name = null, ?string $otherName = null): float
     {
-        return $this->convertValueToMatch($other, $name, $otherName);
+        if ($other instanceof SingleUnitSassNumber) {
+            $coerced = $this->tryCoerceValueToUnit($other->unit);
+
+            if ($coerced !== null) {
+                return $coerced;
+            }
+        }
+
+        // Call the parent to generate a consistent error message.
+        return parent::coerceValueToMatch($other, $name, $otherName);
     }
 
     public function convertToMatch(SassNumber $other, ?string $name = null, ?string $otherName = null): SassNumber
@@ -152,7 +171,7 @@ final class SingleUnitSassNumber extends SassNumber
         return parent::convertToMatch($other, $name, $otherName);
     }
 
-    public function convertValueToMatch(SassNumber $other, ?string $name = null, ?string $otherName = null)
+    public function convertValueToMatch(SassNumber $other, ?string $name = null, ?string $otherName = null): float
     {
         if ($other instanceof SingleUnitSassNumber) {
             $coerced = $this->tryCoerceValueToUnit($other->unit);
@@ -180,7 +199,7 @@ final class SingleUnitSassNumber extends SassNumber
         return parent::coerce($newNumeratorUnits, $newDenominatorUnits, $name);
     }
 
-    public function coerceValue(array $newNumeratorUnits, array $newDenominatorUnits, ?string $name = null)
+    public function coerceValue(array $newNumeratorUnits, array $newDenominatorUnits, ?string $name = null): float
     {
         if (\count($newNumeratorUnits) === 1 && \count($newDenominatorUnits) === 0) {
             $coerced = $this->tryCoerceValueToUnit($newNumeratorUnits[0]);
@@ -194,7 +213,7 @@ final class SingleUnitSassNumber extends SassNumber
         return parent::coerceValue($newNumeratorUnits, $newDenominatorUnits, $name);
     }
 
-    public function coerceValueToUnit(string $unit, ?string $name = null)
+    public function coerceValueToUnit(string $unit, ?string $name = null): float
     {
         $coerced = $this->tryCoerceValueToUnit($unit);
 
@@ -223,13 +242,13 @@ final class SingleUnitSassNumber extends SassNumber
     }
 
     /**
-     * @param int|float    $value
+     * @param float        $value
      * @param list<string> $otherNumerators
      * @param list<string> $otherDenominators
      *
      * @return SassNumber
      */
-    protected function multiplyUnits($value, array $otherNumerators, array $otherDenominators): SassNumber
+    protected function multiplyUnits(float $value, array $otherNumerators, array $otherDenominators): SassNumber
     {
         $newNumerators = $otherDenominators;
         $removed = false;
@@ -256,11 +275,6 @@ final class SingleUnitSassNumber extends SassNumber
         return SassNumber::withUnits($value, $newNumerators, $otherDenominators);
     }
 
-    /**
-     * @param string $unit
-     *
-     * @return SassNumber|null
-     */
     private function tryCoerceToUnit(string $unit): ?SassNumber
     {
         if ($unit === $this->unit) {
@@ -276,12 +290,7 @@ final class SingleUnitSassNumber extends SassNumber
         return new SingleUnitSassNumber($this->getValue() * $factor, $unit);
     }
 
-    /**
-     * @param string $unit
-     *
-     * @return float|int|null
-     */
-    private function tryCoerceValueToUnit(string $unit)
+    private function tryCoerceValueToUnit(string $unit): ?float
     {
         $factor = self::getConversionFactor($unit, $this->unit);
 

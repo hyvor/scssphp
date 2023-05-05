@@ -12,6 +12,8 @@
 
 namespace ScssPhp\ScssPhp\Parser;
 
+use League\Uri\Exceptions\SyntaxError;
+use League\Uri\Uri;
 use ScssPhp\ScssPhp\Ast\Sass\Argument;
 use ScssPhp\ScssPhp\Ast\Sass\ArgumentDeclaration;
 use ScssPhp\ScssPhp\Ast\Sass\ArgumentInvocation;
@@ -31,6 +33,7 @@ use ScssPhp\ScssPhp\Ast\Sass\Expression\NumberExpression;
 use ScssPhp\ScssPhp\Ast\Sass\Expression\ParenthesizedExpression;
 use ScssPhp\ScssPhp\Ast\Sass\Expression\SelectorExpression;
 use ScssPhp\ScssPhp\Ast\Sass\Expression\StringExpression;
+use ScssPhp\ScssPhp\Ast\Sass\Expression\SupportsExpression;
 use ScssPhp\ScssPhp\Ast\Sass\Expression\UnaryOperationExpression;
 use ScssPhp\ScssPhp\Ast\Sass\Expression\UnaryOperator;
 use ScssPhp\ScssPhp\Ast\Sass\Expression\VariableExpression;
@@ -78,9 +81,11 @@ use ScssPhp\ScssPhp\Logger\LoggerInterface;
 use ScssPhp\ScssPhp\SourceSpan\FileSpan;
 use ScssPhp\ScssPhp\Util;
 use ScssPhp\ScssPhp\Util\Character;
+use ScssPhp\ScssPhp\Util\Path;
 use ScssPhp\ScssPhp\Util\StringUtil;
 use ScssPhp\ScssPhp\Value\ListSeparator;
 use ScssPhp\ScssPhp\Value\SassColor;
+use ScssPhp\ScssPhp\Value\SpanColorFormat;
 
 /**
  * @internal
@@ -218,6 +223,25 @@ abstract class StylesheetParser extends Parser
             }
 
             return new Stylesheet($statements, $this->scanner->spanFrom($start), $this->isPlainCss());
+        } catch (FormatException $e) {
+            throw $this->wrapException($e);
+        }
+    }
+
+    public function parseArgumentDeclaration(): ArgumentDeclaration
+    {
+        try {
+            $this->scanner->expectChar('@', '@-rule');
+            $this->identifier();
+            $this->whitespace();
+            $this->identifier();
+            $arguments = $this->argumentDeclaration();
+            $this->whitespace();
+            $this->scanner->expectChar('{');
+
+            $this->scanner->expectDone();
+
+            return $arguments;
         } catch (FormatException $e) {
             throw $this->wrapException($e);
         }
@@ -476,9 +500,7 @@ abstract class StylesheetParser extends Parser
         $beforeDeclaration = $this->scanner->getPosition();
 
         try {
-            $value = $this->lookingAtChildren()
-                ? new StringExpression(new Interpolation([], $this->scanner->getEmptySpan()), true)
-                : $this->expression();
+            $value = $this->expression();
 
             if ($this->lookingAtChildren()) {
                 // Properties that are ambiguous with selectors can't have additional
@@ -1199,33 +1221,47 @@ abstract class StylesheetParser extends Parser
         if ($next === 'u' || $next === 'U') {
             $url = $this->dynamicUrl();
             $this->whitespace();
-            list($supports, $media) = $this->tryImportQueries();
+            $modifiers = $this->tryImportModifiers();
 
-            return new StaticImport(new Interpolation([$url], $this->scanner->spanFrom($start)), $this->scanner->spanFrom($start), $supports, $media);
+            return new StaticImport(new Interpolation([$url], $this->scanner->spanFrom($start)), $this->scanner->spanFrom($start), $modifiers);
         }
 
         $url = $this->string();
         $urlSpan = $this->scanner->spanFrom($start);
         $this->whitespace();
-        list($supports, $media) = $this->tryImportQueries();
+        $modifiers = $this->tryImportModifiers();
 
-        if ($this->isPlainImportUrl($url) || $supports !== null || $media !== null) {
-
-            return new StaticImport(new Interpolation([$urlSpan->getText()], $urlSpan), $this->scanner->spanFrom($start), $supports, $media);
+        if ($this->isPlainImportUrl($url) || $modifiers !== null) {
+            return new StaticImport(new Interpolation([$urlSpan->getText()], $urlSpan), $this->scanner->spanFrom($start), $modifiers);
         }
 
-        // TODO catch the exception of parseImportUrl once it validates the URI format
-
-        return new DynamicImport($this->parseImportUrl($url), $urlSpan);
+        try {
+            return new DynamicImport($this->parseImportUrl($url), $urlSpan);
+        } catch (SyntaxError $e) {
+            $this->error('Invalid URL: ' . $e->getMessage(), $urlSpan, $e);
+        }
     }
 
     /**
      * Parses $url as an import URL.
+     *
+     * @throws SyntaxError
      */
     protected function parseImportUrl(string $url): string
     {
-        // TODO implement URI parsing to enforce well-formed URI for imports ?
+        // Backwards-compatibility for implementations that allow absolute Windows
+        // paths in imports.
+        if (Path::isWindowsAbsolute($url) && !self::isRootRelativeUrl($url)) {
+            return (string) Uri::createFromWindowsPath($url);
+        }
+
+        Uri::createFromString($url);
         return $url;
+    }
+
+    private static function isRootRelativeUrl(string $path): bool
+    {
+        return $path !== '' && $path[0] === '/';
     }
 
     /**
@@ -1253,57 +1289,127 @@ abstract class StylesheetParser extends Parser
     }
 
     /**
-     * Consumes a supports condition and/or a media query after an `@import`.
-     *
-     * @return array{SupportsCondition|null, Interpolation|null}
+     * Returns `null` if there are no modifiers.
      */
-    protected function tryImportQueries(): array
+    protected function tryImportModifiers(): ?Interpolation
     {
-        $supports = null;
-
-        if ($this->scanIdentifier('supports')) {
-            $this->scanner->expectChar('(');
-            $start = $this->scanner->getPosition();
-
-            if ($this->scanIdentifier('not')) {
-                $this->whitespace();
-                $supports = new SupportsNegation($this->supportsConditionInParens(), $this->scanner->spanFrom($start));
-            } elseif ($this->scanner->peekChar() === '(') {
-                $supports = $this->supportsCondition();
-            } else {
-                if ($this->lookingAtInterpolatedIdentifier()) {
-                    $identifier = $this->interpolatedIdentifier();
-
-                    if ($identifier->getAsPlain() !== null && strtolower($identifier->getAsPlain()) === 'not') {
-                        $this->error('"not" is not a valid identifier here.', $identifier->getSpan());
-                    }
-
-                    if ($this->scanner->scanChar('(')) {
-                        $arguments = $this->interpolatedDeclarationValue(true, true);
-                        $this->scanner->expectChar(')');
-                        $supports = new SupportsFunction($identifier, $arguments, $this->scanner->spanFrom($start));
-                    } else {
-                        // Backtrack to parse a variable declaration
-                        $this->scanner->setPosition($start);
-                    }
-                }
-
-                if ($supports === null) {
-                    $name = $this->expression();
-                    $this->scanner->expectChar(':');
-                    $this->whitespace();
-                    $value = $this->expression();
-                    $supports = new SupportsDeclaration($name, $value, $this->scanner->spanFrom($start));
-                }
-            }
-
-            $this->scanner->expectChar(')');
-            $this->whitespace();
+        // Exit before allocating anything if we're not looking at any modifiers, as
+        // is the most common case.
+        if (!$this->lookingAtInterpolatedIdentifier() && $this->scanner->peekChar() !== '(') {
+            return null;
         }
 
-        $media = $this->lookingAtInterpolatedIdentifier() || $this->scanner->peekChar() === '(' ? $this->mediaQueryList() : null;
+        $start = $this->scanner->getPosition();
+        $buffer = new InterpolationBuffer();
 
-        return [$supports, $media];
+        while (true) {
+            if ($this->lookingAtInterpolatedIdentifier()) {
+                if (!$buffer->isEmpty()) {
+                    $buffer->write(' ');
+                }
+
+                $identifier = $this->interpolatedIdentifier();
+                $buffer->addInterpolation($identifier);
+
+                $name = $identifier->getAsPlain() !== null ? strtolower($identifier->getAsPlain()) : null;
+
+                if ($name !== 'and' && $this->scanner->scanChar('(')) {
+                    if ($name === 'supports') {
+                        $query = $this->importSupportsQuery();
+
+                        if (!$query instanceof SupportsDeclaration) {
+                            $buffer->write('(');
+                        }
+
+                        $buffer->add(new SupportsExpression($query));
+
+                        if (!$query instanceof SupportsDeclaration) {
+                            $buffer->write(')');
+                        }
+                    } else {
+                        $buffer->write('(');
+                        $buffer->addInterpolation($this->interpolatedDeclarationValue(true, true));
+                        $buffer->write(')');
+                    }
+
+                    $this->scanner->expectChar(')');
+                    $this->whitespace();
+                } else {
+                    $this->whitespace();
+                    if ($this->scanner->scanChar(',')) {
+                        $buffer->write(', ');
+                        $buffer->addInterpolation($this->mediaQueryList());
+
+                        return $buffer->buildInterpolation($this->scanner->spanFrom($start));
+                    }
+                }
+            } elseif ($this->scanner->peekChar() === '(') {
+                if (!$buffer->isEmpty()) {
+                    $buffer->write(' ');
+                }
+                $buffer->addInterpolation($this->mediaQueryList());
+
+                return $buffer->buildInterpolation($this->scanner->spanFrom($start));
+            } else {
+                return $buffer->buildInterpolation($this->scanner->spanFrom($start));
+            }
+        }
+    }
+
+    /**
+     * Consumes the contents of a `supports()` function after an `@import` rule
+     * (but not the function name or parentheses).
+     */
+    private function importSupportsQuery(): SupportsCondition
+    {
+        if ($this->scanIdentifier('not')) {
+            $this->whitespace();
+            $start = $this->scanner->getPosition();
+
+            return new SupportsNegation($this->supportsConditionInParens(), $this->scanner->spanFrom($start));
+        }
+
+        if ($this->scanner->peekChar() === '(') {
+            return $this->supportsCondition();
+        }
+
+        $function = $this->tryImportSupportsFunction();
+
+        if ($function !== null) {
+            return $function;
+        }
+
+        $start = $this->scanner->getPosition();
+        $name = $this->expression();
+        $this->scanner->expectChar(':');
+
+        return $this->supportsDeclarationValue($name, $start);
+    }
+
+    /**
+     * Consumes a function call within a `supports()` function after an
+     * `@import` if available.
+     */
+    private function tryImportSupportsFunction(): ?SupportsCondition
+    {
+        if (!$this->lookingAtInterpolatedIdentifier()) {
+            return null;
+        }
+
+        $start = $this->scanner->getPosition();
+        $name = $this->interpolatedIdentifier();
+        assert($name->getAsPlain() !== 'not');
+
+        if (!$this->scanner->scanChar('(')) {
+            $this->scanner->setPosition($start);
+
+            return null;
+        }
+
+        $value = $this->interpolatedDeclarationValue(true, true);
+        $this->scanner->expectChar(')');
+
+        return new SupportsFunction($name, $value, $this->scanner->spanFrom($start));
     }
 
     /**
@@ -1486,7 +1592,7 @@ abstract class StylesheetParser extends Parser
 
         return $this->withChildren($this->statementCallable, $start, function (array $children, FileSpan $span) use ($name, $value, $needsDeprecationWarning) {
             if ($needsDeprecationWarning) {
-                $this->logger->warn($span->message("@-moz-document is deprecated and support will be removed in Dart Sass 2.0.0.\n\nFor details, see http://bit.ly/MozDocument."), true);
+                $this->logger->warn("@-moz-document is deprecated and support will be removed in Dart Sass 2.0.0.\n\nFor details, see https://sass-lang.com/d/moz-document.", true, $span);
             }
 
             return new AtRule($name, $span, $value, $children);
@@ -1654,8 +1760,12 @@ abstract class StylesheetParser extends Parser
      * If $mixin is `true`, this is parsed as a mixin invocation. Mixin
      * invocations don't allow the Microsoft-style `=` operator at the top level,
      * but function invocations do.
+     *
+     * If $allowEmptySecondArg is `true`, this allows the second argument to be
+     * omitted, in which case an unquoted empty string will be passed in its
+     * place.
      */
-    private function argumentInvocation(bool $mixin = false): ArgumentInvocation
+    private function argumentInvocation(bool $mixin = false, bool $allowEmptySecondArg = false): ArgumentInvocation
     {
         $start = $this->scanner->getPosition();
         $this->scanner->expectChar('(');
@@ -1701,6 +1811,11 @@ abstract class StylesheetParser extends Parser
                 break;
             }
             $this->whitespace();
+
+            if ($allowEmptySecondArg && \count($positional) === 1 && \count($named) === 0 && $rest === null && $this->scanner->peekChar() === ')') {
+                $positional[] = StringExpression::plain('', $this->scanner->getEmptySpan());
+                break;
+            }
         }
 
         $this->scanner->expectChar(')');
@@ -1715,7 +1830,7 @@ abstract class StylesheetParser extends Parser
      *
      * @phpstan-impure
      */
-    protected function expression(?callable $until = null, bool $singleEquals = false, bool $bracketList = false): Expression
+    private function expression(?callable $until = null, bool $singleEquals = false, bool $bracketList = false): Expression
     {
         if ($until !== null && $until()) {
             $this->scanner->error('Expected expression.');
@@ -1813,6 +1928,31 @@ abstract class StylesheetParser extends Parser
             } else {
                 $singleExpression = new BinaryOperationExpression($operator, $left, $right);
                 $allowSlash = false;
+
+                if ($operator === BinaryOperator::PLUS || $operator === BinaryOperator::MINUS) {
+                    if (
+                        $this->scanner->substring($right->getSpan()->getStart()->getOffset() - 1, $right->getSpan()->getStart()->getOffset()) === $operator
+                        && Character::isWhitespace($this->scanner->getString()[$left->getSpan()->getEnd()->getOffset()])
+                    ) {
+                        $message = <<<WARNING
+This operation is parsed as:
+
+    $left $operator $right
+
+but you may have intended it to mean:
+
+    $left ($operator$right)
+
+Add a space after $operator to clarify that it's meant to be a binary operation, or wrap
+it in parentheses to make it a unary operation. This will be an error in future
+versions of Sass.
+
+More info and automated migrator: https://sass-lang.com/d/strict-unary
+WARNING;
+
+                        $this->logger->warn($message, true, $singleExpression->getSpan());
+                    }
+                }
             }
         };
 
@@ -2191,8 +2331,10 @@ abstract class StylesheetParser extends Parser
      *
      * If $singleEquals is true, this will allow the Microsoft-style `=`
      * operator at the top level.
+     *
+     * @phpstan-impure
      */
-    private function expressionUntilComma(bool $singleEquals = false): Expression
+    protected function expressionUntilComma(bool $singleEquals = false): Expression
     {
         return $this->expression(function () {
             return $this->scanner->peekChar() === ',';
@@ -2438,7 +2580,7 @@ abstract class StylesheetParser extends Parser
 
         $first = $this->scanner->peekChar();
         if ($first !== null && Character::isDigit($first)) {
-            return new ColorExpression($this->hexColorContents(), $this->scanner->spanFrom($start));
+            return new ColorExpression($this->hexColorContents($start), $this->scanner->spanFrom($start));
         }
 
         $afterHash = $this->scanner->getPosition();
@@ -2446,7 +2588,7 @@ abstract class StylesheetParser extends Parser
         if ($this->isHexColor($identifier)) {
             $this->scanner->setPosition($afterHash);
 
-            return new ColorExpression($this->hexColorContents(), $this->scanner->spanFrom($start));
+            return new ColorExpression($this->hexColorContents($start), $this->scanner->spanFrom($start));
         }
 
         $buffer = new InterpolationBuffer();
@@ -2459,7 +2601,7 @@ abstract class StylesheetParser extends Parser
     /**
      * Consumes the contents of a hex color, after the `#`.
      */
-    private function hexColorContents(): SassColor
+    private function hexColorContents(int $start): SassColor
     {
         $digit1 = $this->hexDigit();
         $digit2 = $this->hexDigit();
@@ -2492,7 +2634,9 @@ abstract class StylesheetParser extends Parser
             }
         }
 
-        return SassColor::rgb($red, $green, $blue, $alpha);
+        // Don't emit four- or eight-digit hex colors as hex, since that's not
+        // yet well-supported in browsers.
+        return SassColor::rgbInternal($red, $green, $blue, $alpha, $alpha === null ? new SpanColorFormat($this->scanner->spanFrom($start)) : null);
     }
 
     private function isHexColor(Interpolation $interpolation): bool
@@ -2635,19 +2779,24 @@ abstract class StylesheetParser extends Parser
     {
         $start = $this->scanner->getPosition();
         $first = $this->scanner->peekChar();
-        $sign = $first === '-' ? -1 : 1;
 
         if ($first === '+' || $first === '-') {
             $this->scanner->readChar();
         }
 
-        $number = $this->scanner->peekChar() === '.' ? 0 : $this->naturalNumber();
+        if ($this->scanner->peekChar() !== '.') {
+            $this->consumeNaturalNumber();
+        }
 
         // Don't complain about a dot after a number unless the number starts with a
         // dot. We don't allow a plain ".", but we need to allow "1." so that
         // "1..." will work as a rest argument.
-        $number += $this->tryDecimal($this->scanner->getPosition() !== $start);
-        $number *= $this->tryExponent();
+        $this->tryDecimal($this->scanner->getPosition() !== $start);
+        $this->tryExponent();
+
+        // Use PHP's built-in double parsing so that we don't accumulate
+        // floating-point errors for numbers with lots of digits.
+        $number = floatval($this->scanner->substring($start));
 
         $unit = null;
         if ($this->scanner->scanChar('%')) {
@@ -2656,32 +2805,41 @@ abstract class StylesheetParser extends Parser
             $unit = $this->identifier(false, true);
         }
 
-        return new NumberExpression($sign * $number, $this->scanner->spanFrom($start), $unit);
+        return new NumberExpression($number, $this->scanner->spanFrom($start), $unit);
     }
 
     /**
-     * Consumes the decimal component of a number and returns its value, or 0 if
-     * there is no decimal component.
+     * Consumes a natural number (that is, a non-negative integer).
+     *
+     * Doesn't support scientific notation.
+     */
+    private function consumeNaturalNumber(): void
+    {
+        if (!Character::isDigit($this->scanner->readChar())) {
+            $this->scanner->error('Expected digit.', $this->scanner->getPosition() - 1);
+        }
+
+        while (Character::isDigit($this->scanner->peekChar())) {
+            $this->scanner->readChar();
+        }
+    }
+
+    /**
+     * Consumes the decimal component of a number if it exists.
      *
      * If $allowTrailingDot is `false`, this will throw an error if there's a
      * dot without any numbers following it. Otherwise, it will ignore the dot
      * without consuming it.
-     *
-     * @param bool $allowTrailingDot
-     *
-     * @return int|float
      */
-    private function tryDecimal(bool $allowTrailingDot = false)
+    private function tryDecimal(bool $allowTrailingDot = false): void
     {
-        $start = $this->scanner->getPosition();
-
         if ($this->scanner->peekChar() !== '.') {
-            return 0;
+            return;
         }
 
         if (!Character::isDigit($this->scanner->peekChar(1))) {
             if ($allowTrailingDot) {
-                return 0;
+                return;
             }
 
             $this->scanner->error('Expected digit.', $this->scanner->getPosition() + 1);
@@ -2691,34 +2849,26 @@ abstract class StylesheetParser extends Parser
         while (Character::isDigit($this->scanner->peekChar())) {
             $this->scanner->readChar();
         }
-
-        // Use PHP's built-in float parsing so that we don't accumulate
-        // floating-point errors for numbers with lots of digits.
-        return floatval($this->scanner->substring($start));
     }
 
     /**
-     * Consumes the exponent component of a number and returns its value, or 1 if
-     * there is no exponent component.
-     *
-     * @return int|float
+     * Consumes the exponent component of a number if it exists.
      */
-    private function tryExponent()
+    private function tryExponent(): void
     {
         $first = $this->scanner->peekChar();
 
         if ($first !== 'e' && $first !== 'E') {
-            return 1;
+            return;
         }
 
         $next = $this->scanner->peekChar(1);
 
         if (!Character::isDigit($next) && $next !== '-' && $next !== '+') {
-            return 1;
+            return;
         }
 
         $this->scanner->readChar();
-        $exponentSign = $next === '-' ? -1 : 1;
         if ($next === '+' || $next === '-') {
             $this->scanner->readChar();
         }
@@ -2727,14 +2877,9 @@ abstract class StylesheetParser extends Parser
             $this->scanner->error('Expected digit.');
         }
 
-        $exponent = 0.0;
-
         while (Character::isDigit($this->scanner->peekChar())) {
-            $exponent *= 10;
-            $exponent += \ord($this->scanner->readChar()) - \ord('0');
+            $this->scanner->readChar();
         }
-
-        return pow(10, $exponentSign * $exponent);
     }
 
     /**
@@ -2912,7 +3057,10 @@ abstract class StylesheetParser extends Parser
                 $color = Colors::colorNameToColor($lower);
 
                 if ($color !== null) {
-                    return new ColorExpression($color, $identifier->getSpan());
+                    return new ColorExpression(
+                        SassColor::rgbInternal($color->getRed(), $color->getGreen(), $color->getBlue(), $color->getAlpha(), new SpanColorFormat($identifier->getSpan())),
+                        $identifier->getSpan()
+                    );
                 }
             }
 
@@ -2942,7 +3090,7 @@ abstract class StylesheetParser extends Parser
                     return new InterpolatedFunctionExpression($identifier, $this->argumentInvocation(), $this->scanner->spanFrom($start));
                 }
 
-                return new FunctionExpression($plain, $this->argumentInvocation(), $this->scanner->spanFrom($start));
+                return new FunctionExpression($plain, $this->argumentInvocation(false, $lower === 'var'), $this->scanner->spanFrom($start));
 
             default:
                 return new StringExpression($identifier);
@@ -3759,6 +3907,7 @@ abstract class StylesheetParser extends Parser
         while (true) {
             $this->whitespace();
             $this->mediaQuery($buffer);
+            $this->whitespace();
 
             if (!$this->scanner->scanChar(',')) {
                 break;
@@ -3775,70 +3924,139 @@ abstract class StylesheetParser extends Parser
      */
     private function mediaQuery(InterpolationBuffer $buffer): void
     {
-        if ($this->scanner->peekChar() !== '(') {
-            $buffer->addInterpolation($this->interpolatedIdentifier());
+        if ($this->scanner->peekChar() === '(') {
+            $this->mediaInParens($buffer);
             $this->whitespace();
 
-            if (!$this->lookingAtInterpolatedIdentifier()) {
-                // For example, "@media screen {".
-                return;
+            if ($this->scanIdentifier('and')) {
+                $buffer->write(' and ');
+                $this->expectWhitespace();
+                $this->mediaLogicSequence($buffer, 'and');
+            } elseif ($this->scanIdentifier('or')) {
+                $buffer->write(' or ');
+                $this->expectWhitespace();
+                $this->mediaLogicSequence($buffer, 'or');
             }
 
-            $buffer->write(' ');
-            $identifier = $this->interpolatedIdentifier();
-            $this->whitespace();
+            return;
+        }
 
-            if (StringUtil::equalsIgnoreCase($identifier->getAsPlain(), 'and')) {
-                // For example, "@media screen and ..."
+        $identifier1 = $this->interpolatedIdentifier();
+
+        if (StringUtil::equalsIgnoreCase($identifier1->getAsPlain(), 'not')) {
+            // For example, "@media not (...) {"
+            $this->expectWhitespace();
+
+            if (!$this->lookingAtInterpolatedIdentifier()) {
+                $buffer->write('not ');
+                $this->mediaOrInterp($buffer);
+
+                return;
+            }
+        }
+
+        $this->whitespace();
+        $buffer->addInterpolation($identifier1);
+
+        if (!$this->lookingAtInterpolatedIdentifier()) {
+            // For example, "@media screen {".
+            return;
+        }
+
+        $buffer->write(' ');
+
+        $identifier2 = $this->interpolatedIdentifier();
+
+        if (StringUtil::equalsIgnoreCase($identifier2->getAsPlain(), 'and')) {
+            $this->expectWhitespace();
+            // For example, "@media screen and ..."
+            $buffer->write(' and ');
+        } else {
+            $this->whitespace();
+            $buffer->addInterpolation($identifier2);
+
+            if ($this->scanIdentifier('and')) {
+                // For example, "@media only screen and ..."
+                $this->expectWhitespace();
                 $buffer->write(' and ');
             } else {
-                $buffer->addInterpolation($identifier);
-
-                if ($this->scanIdentifier('and')) {
-                    // For example, "@media only screen and ..."
-                    $this->whitespace();
-                    $buffer->write(' and ');
-                } else {
-                    // For example, "@media only screen {"
-                    return;
-                }
+                // For example, "@media only screen {"
+                return;
             }
         }
 
         // We've consumed either `IDENTIFIER "and"` or
         // `IDENTIFIER IDENTIFIER "and"`.
 
+        if ($this->scanIdentifier('not')) {
+            // For example, "@media screen and not (...) {"
+            $this->expectWhitespace();
+            $buffer->write('not ');
+            $this->mediaOrInterp($buffer);
+            return;
+        }
+
+        $this->mediaLogicSequence($buffer, 'and');
+    }
+
+    /**
+     * Consumes one or more `MediaOrInterp` expressions separated by $operator
+     * and writes them to $buffer.
+     */
+    private function mediaLogicSequence(InterpolationBuffer $buffer, string $operator): void
+    {
         while (true) {
-            $this->whitespace();
-            $buffer->addInterpolation($this->mediaFeature());
+            $this->mediaOrInterp($buffer);
             $this->whitespace();
 
-            if (!$this->scanIdentifier('and')) {
-                break;
+            if (!$this->scanIdentifier($operator)) {
+                return;
             }
+            $this->expectWhitespace();
 
-            $buffer->write(' and ');
+            $buffer->write(' ');
+            $buffer->write($operator);
+            $buffer->write(' ');
         }
     }
 
     /**
-     * Consumes a media query feature.
+     * Consumes a `MediaOrInterp` expression and writes it to $buffer.
      */
-    private function mediaFeature(): Interpolation
+    private function mediaOrInterp(InterpolationBuffer $buffer): void
     {
         if ($this->scanner->peekChar() === '#') {
             $interpolation = $this->singleInterpolation();
 
-            return new Interpolation([$interpolation], $interpolation->getSpan());
+            $buffer->addInterpolation(new Interpolation([$interpolation], $interpolation->getSpan()));
+        } else {
+            $this->mediaInParens($buffer);
         }
+    }
 
-        $start = $this->scanner->getPosition();
-        $buffer = new InterpolationBuffer();
-        $this->scanner->expectChar('(');
+    /**
+     * Consumes a `MediaInParens` expression and writes it to $buffer.
+     */
+    private function mediaInParens(InterpolationBuffer $buffer): void
+    {
+        $this->scanner->expectChar('(', 'media condition in parentheses');
         $buffer->write('(');
         $this->whitespace();
 
-        $buffer->add($this->expressionUntilComparison());
+        $needsParenDeprecation = $this->scanner->peekChar() === '(';
+        $needsNotDeprecation = $this->matchesIdentifier('not');
+        $expression = $this->expressionUntilComparison();
+
+        if ($needsParenDeprecation || $needsNotDeprecation) {
+            $this->logger->warn(sprintf(
+                "Starting a @media query with \"%s\" is deprecated because it conflicts with official CSS syntax.\n\nTo preserve existing behavior: #{%s}\nTo migrate to new behavior: #{\"%s\"}\n\nFor details, see https://sass-lang.com/d/media-logic",
+                $needsParenDeprecation ? '(' : 'not',
+                $expression,
+                $expression
+            ), true, $expression->getSpan());
+        }
+
+        $buffer->add($expression);
 
         if ($this->scanner->scanChar(':')) {
             $this->whitespace();
@@ -3875,8 +4093,6 @@ abstract class StylesheetParser extends Parser
         $this->scanner->expectChar(')');
         $this->whitespace();
         $buffer->write(')');
-
-        return $buffer->buildInterpolation($this->scanner->spanFrom($start));
     }
 
     /**
@@ -4032,9 +4248,20 @@ abstract class StylesheetParser extends Parser
             return new SupportsAnything($contents, $this->scanner->spanFrom($start));
         }
 
-        $this->whitespace();
-        $value = $this->expression();
+        $declaration = $this->supportsDeclarationValue($name, $start);
         $this->scanner->expectChar(')');
+
+        return $declaration;
+    }
+
+    private function supportsDeclarationValue(Expression $name, int $start): SupportsDeclaration
+    {
+        if ($name instanceof StringExpression && !$name->hasQuotes() && StringUtil::startsWith($name->getText()->getInitialPlain(), '--')) {
+            $value = new StringExpression($this->interpolatedDeclarationValue());
+        } else {
+            $this->whitespace();
+            $value = $this->expression();
+        }
 
         return new SupportsDeclaration($name, $value, $this->scanner->spanFrom($start));
     }
