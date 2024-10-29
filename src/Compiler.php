@@ -367,6 +367,12 @@ class Compiler
     private $warnedChildFunctions = [];
 
     /**
+     * @author HYVOR
+     * For saving the files for importing (array loading)
+     */
+    private array $files = [];
+
+    /**
      * Constructor
      *
      * @param array|null $cacheOptions
@@ -384,6 +390,15 @@ class Compiler
         }
 
         $this->logger = new StreamLogger(fopen('php://stderr', 'w'), true);
+    }
+
+    /**
+     * @author HYVOR
+     * Register files for importing
+     */
+    public function registerFiles(array $files): void
+    {
+        $this->files = $files;
     }
 
     /**
@@ -481,15 +496,28 @@ class Compiler
      *
      * @throws SassException when the source fails to compile
      */
-    public function compileFile($path)
+//    public function compileFile($path)
+//    {
+//        $source = file_get_contents($path);
+//
+//        if ($source === false) {
+//            throw new \RuntimeException('Could not read the file content');
+//        }
+//
+//        return $this->compileString($source, $path);
+//    }
+
+    /**
+     * @author HYVOR
+     * Compiles a file
+     * registerFiles must be called before calling this
+     */
+    public function compileFile(string $fileName) : null|CompilationResult
     {
-        $source = file_get_contents($path);
-
-        if ($source === false) {
-            throw new \RuntimeException('Could not read the file content');
+        if (isset($this->files[$fileName])) {
+            return $this->compileString($this->files[$fileName]);
         }
-
-        return $this->compileString($source, $path);
+        return null;
     }
 
     /**
@@ -5806,17 +5834,25 @@ EOL;
             throw $this->error('The Sass indented syntax is not implemented.');
         }
 
-        if (isset($this->importCache[$realPath])) {
-            $this->handleImportLoop($realPath);
+//        if (isset($this->importCache[$realPath])) {
+//            $this->handleImportLoop($realPath);
+//
+//            $tree = $this->importCache[$realPath];
+//        } else {
+            $pathArray = explode('/', $path);
+            $fileName = end($pathArray);
 
-            $tree = $this->importCache[$realPath];
-        } else {
-            $code   = file_get_contents($path);
+            /// $code   = file_get_contents($path);
+            if (!isset($this->files[$fileName])) {
+                throw $this->error('File not found: ' . $path);
+            }
+
+            $code   = $this->files[$fileName];
             $parser = $this->parserFactory($path);
             $tree   = $parser->parse($code);
 
             $this->importCache[$realPath] = $tree;
-        }
+//        }
 
         $currentDirectory = $this->currentDirectory;
         $this->currentDirectory = dirname($path);
@@ -5905,6 +5941,14 @@ EOL;
                 }
             }
             return null;
+        }
+
+        if(array_key_exists($url, $this->files)){
+            return $url;
+        }
+        // To return the files with the .scss extention
+        if(!\is_null($this->files)){
+            return $url.'.scss';
         }
 
         if (!\is_null($currentDir)) {
