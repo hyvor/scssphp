@@ -1,5 +1,101 @@
 # Changelog
 
+## **1.13.0** -- August 17, 2024
+
+**Deprecated**
+
+* Deprecate registering a custom function with a callable expecting 2 arguments (@stof)
+
+## **1.12.1** -- January 13, 2024
+
+**Fixed**
+
+* Fix the handling of leading spaces in interpolated media queries (@stof)
+* Fix the compilation cache key when using numbers in variables (@stof)
+
+## **1.12.0** -- November 14, 2023
+
+**Deprecated**
+
+* Deprecate passing string with extra content after the expression in `ValueConverter::parseValue` (@stof)
+
+**Added**
+
+* Add the `Compiler::compileFile` method (@stof)
+* Add the `OutputStyle::fromString` and `OutputStyle::toString` methods to allow writing code supporting both Scssphp 1.12+ and 2.0 (@stof)
+
+**Fixed**
+
+* Fix the parsing of values in `ValueConverter::parseValue` when using comments inside the value source (@stof)
+
+## **1.11.1** -- September 24, 2023
+
+**Added**
+
+* Add dedicated error handling when passing invalid UTF-8 (@stof)
+
+**Fixed**
+
+* Fix extending a selector using `:is()` (@ssltg)
+
+## **1.11.0** -- September 2, 2022
+
+**Deprecated**
+
+* Deprecate passing a limit with unit to `random()` (@stof)
+
+**Added**
+
+* Add support for empty fallback in `var()` (@stof)
+
+**Fixed**
+
+* Fix the handling of mixed case operators in media queries (@stof)
+
+**Changed**
+
+* Improve error messages for incorrect units in color functions (@stof)
+
+## **1.10.5** -- July 27, 2022
+
+**Fixed**
+
+* Fix the handling of non-integer numbers in `nth` and `set-nth` (@max-m)
+
+## **1.10.4** -- July 26,2022
+
+**Fixed**
+
+* Remove false positive deprecation warnings when compiling Bootstrap 5.2.0 (@stof)
+
+**Changed**
+
+* Remove usage of interpolation syntax deprecated in PHP 8.2 (@shyim)
+
+## **1.10.3** -- May 16, 2022
+
+**Fixed**
+
+* Fix the handling of nested at-root in mixins (@stof)
+
+**Changed**
+
+* Mark the logger implementations as `@final` to prepare for 2.0 (@stof)
+
+## **1.10.2** -- March 2, 2022
+
+**Fixed**
+
+* Fix the tracking of the location of comments when using sourcemaps (@stof)
+* Fix the leaking of an output buffer in case of error during the formatting of the output (@stof)
+
+## **1.10.1** -- February 28, 2022
+
+**Fixed**
+
+* Fix the handling of `rgb`, `rgba`, `hsl` and `hsla` called with a trailing comma in arguments (@stof)
+* Fix the handling of negative index in `str-insert` (@stof)
+
 ## **1.10.0** -- January 6, 2022
 
 **Fixed**

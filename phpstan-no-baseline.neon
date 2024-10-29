@@ -23,7 +23,15 @@ parameters:
             path: src/Compiler.php
 
         -
+            message: "#^Method ScssPhp\\\\ScssPhp\\\\Compiler\\:\\:lib[^(]+\\(\\) return type has no value type specified in iterable type array\\.$#"
+            path: src/Compiler.php
+
+        -
             message: "#^Method ScssPhp\\\\ScssPhp\\\\Compiler\\:\\:lib[^(]+\\(\\) has parameter \\$args with no type specified\\.$#"
+            path: src/Compiler.php
+
+        -
+            message: "#^Method ScssPhp\\\\ScssPhp\\\\Compiler\\:\\:lib[^(]+\\(\\) has parameter \\$args with no value type specified in iterable type array\\.$#"
             path: src/Compiler.php
 
         -
@@ -31,5 +39,16 @@ parameters:
             path: src/Compiler.php
 
         -
+            message: "#^Method ScssPhp\\\\ScssPhp\\\\Compiler\\:\\:lib[^(]+\\(\\) has parameter \\$kwargs with no value type specified in iterable type array\\.$#"
+            path: src/Compiler.php
+
+        -
             message: "#^Method ScssPhp\\\\ScssPhp\\\\Parser\\:\\:[^(]+\\(\\) has parameter \\$out with no value type specified in iterable type array\\.$#"
             path: src/Parser.php
+
+        -
+            message: "#^Method ScssPhp\\\\ScssPhp\\\\Parser\\:\\:[^(]+\\(\\) has @param-out PHPDoc tag for parameter \\$\\w+ with no value type specified in iterable type array\\.$#"
+            path: src/Parser.php
+
+includes:
+    - vendor-bin/phpstan/vendor/phpstan/phpstan/conf/bleedingEdge.neon

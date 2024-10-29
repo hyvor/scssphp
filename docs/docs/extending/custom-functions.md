@@ -48,7 +48,7 @@ There are 3 kinds of arguments that can be declared:
 
 The compiler will take care of validating arguments against the function
 signature, supporting the same features as for calls to functions defined in
-SCSS directly. However, it is still the responsibility of the callable to
+Sass directly. However, it is still the responsibility of the callable to
 validate the values themselves. The `Compiler::assert*` helpers should be used
 to validate the type, providing the argument name for better error reporting.
 To report custom errors, the callable must use the
@@ -61,7 +61,7 @@ reporting.
 
 The callable receives 2 arguments. However, the second one is passed only for
 historical reasons (and for some special internal usages) and should not be used
-anymore.
+anymore. Registering a function that requires 2 parameters to be passed is deprecated.
 
 The first argument is an array of Sass values, with one value per declared
 arguments. The compiler guarantees that all arguments are always provided to the
@@ -111,7 +111,7 @@ The direct migration is to declare the function with a rest argument:
  $compiler->registerFunction(
    'foo',
 -  function ($positionalArgs, $keywordArgs) use ($compiler) {
-+  function ($args) use ($compiler) {
++  function (array $args) use ($compiler) {
 +    $restArgument = $args[0];
 +    $positionalArgs = $restArgument[2];
 +    $keywordArgs = $compiler->getArgumentListKeywords($restArgument);

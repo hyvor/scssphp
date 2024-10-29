@@ -25,10 +25,11 @@ class FrameworkTest extends TestCase
     {
         $compiler = new Compiler();
         $compiler->setLogger(new QuietLogger());
+        $compiler->setSourceMap(Compiler::SOURCE_MAP_INLINE);
 
         $entrypoint = dirname(__DIR__) . '/vendor/twbs/bootstrap/scss/bootstrap.scss';
 
-        $result = $compiler->compileString(file_get_contents($entrypoint), $entrypoint);
+        $result = $compiler->compileFile($entrypoint);
 
         $this->assertNotEmpty($result->getCss());
     }
@@ -37,10 +38,11 @@ class FrameworkTest extends TestCase
     {
         $compiler = new Compiler();
         $compiler->setLogger(new QuietLogger());
+        $compiler->setSourceMap(Compiler::SOURCE_MAP_INLINE);
 
         $entrypoint = dirname(__DIR__) . '/vendor/twbs/bootstrap4/scss/bootstrap.scss';
 
-        $result = $compiler->compileString(file_get_contents($entrypoint), $entrypoint);
+        $result = $compiler->compileFile($entrypoint);
 
         $this->assertNotEmpty($result->getCss());
     }
@@ -50,6 +52,7 @@ class FrameworkTest extends TestCase
         $compiler = new Compiler();
         $compiler->addImportPath(dirname(__DIR__) . '/vendor/twbs/bootstrap4/scss');
         $compiler->setLogger(new QuietLogger());
+        $compiler->setSourceMap(Compiler::SOURCE_MAP_INLINE);
 
         $scss = <<<'SCSS'
 $enable-shadows: true;
@@ -67,10 +70,11 @@ SCSS;
     {
         $compiler = new Compiler();
         $compiler->setLogger(new QuietLogger());
+        $compiler->setSourceMap(Compiler::SOURCE_MAP_INLINE);
 
         $entrypoint = dirname(__DIR__) . '/vendor/zurb/foundation/assets/foundation.scss';
 
-        $result = $compiler->compileString(file_get_contents($entrypoint), $entrypoint);
+        $result = $compiler->compileFile($entrypoint);
 
         $this->assertNotEmpty($result->getCss());
     }
@@ -82,10 +86,11 @@ SCSS;
     {
         $compiler = new Compiler();
         $compiler->setLogger(new QuietLogger());
+        $compiler->setSourceMap(Compiler::SOURCE_MAP_INLINE);
         $compiler->addImportPath(dirname(__DIR__) . '/vendor/thoughtbot/bourbon');
         $compiler->addImportPath(dirname(__DIR__) . '/vendor/thoughtbot/bourbon/spec/fixtures');
 
-        $result = $compiler->compileString(file_get_contents($entrypoint), $entrypoint);
+        $result = $compiler->compileFile($entrypoint);
 
         $this->assertNotEmpty($result->getCss());
     }
